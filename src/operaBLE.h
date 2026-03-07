@@ -1,10 +1,9 @@
 #include "config.h"
 #if !defined(_OPERA_BLE_) && defined(USAR_ESP32_UART_BLE)
     #define _OPERA_BLE_
-    #include <BLEDevice.h>
-    #include <BLEServer.h>
-    #include <BLEUtils.h>
-    #include <BLE2902.h>
+
+    // NimBLE-Arduino: substitui BLEDevice.h, BLEServer.h, BLEUtils.h, BLE2902.h e BLESecurity.h
+    #include <NimBLEDevice.h>
 
     #include "operacional.h"
     #include "operaBLESecurity.h"
