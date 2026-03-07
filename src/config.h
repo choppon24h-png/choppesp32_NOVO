@@ -1,7 +1,9 @@
-#include "Arduino.h"
 
 #ifndef _CONFIG_H_
     #define _CONFIG_H_   
+    
+    #include <Arduino.h>
+
 
     // Definições para debug via porta serial (Serial Monitor)
     #define debug_debug
