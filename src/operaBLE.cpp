@@ -14,9 +14,8 @@
  * que o mesmo hardware sempre gera o mesmo PIN.
  */
 uint32_t generatePinFromMac() {
-    uint64_t macAddress  = ESP.getEfuseMac();
-    uint32_t last3Bytes  = (uint32_t)(macAddress & 0xFFFFFF);
-    uint32_t pin         = last3Bytes % 1000000; // Garante maximo 6 digitos
+    // PIN fixo definido pelo usuario — nao depende do MAC.
+    const uint32_t pin = 259087;
     DBG_PRINT(F("[BLE_SEC] PIN gerado: "));
     DBG_PRINTF("%06lu\n", pin);
     return pin;
