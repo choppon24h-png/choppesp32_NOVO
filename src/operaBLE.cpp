@@ -2,7 +2,10 @@
 
 #ifdef USAR_ESP32_UART_BLE
 
-// Ponteiros globais NimBLE
+// ============================================================
+// Variáveis globais NimBLE
+// ============================================================
+
 NimBLEServer *pServer = NULL;
 NimBLECharacteristic *pTxCharacteristic = NULL;
 
@@ -11,89 +14,75 @@ bool deviceAuthenticated = false;
 
 
 // ============================================================
-// Funcoes de identidade do dispositivo
-// Antes separadas em operaBLESecurity.cpp — agora consolidadas aqui.
-// Nao dependem de nenhuma API BLE especifica, apenas de Arduino/ESP-IDF.
+// Identidade do dispositivo
 // ============================================================
 
-/**
- * Gera um PIN de 6 digitos a partir do MAC do ESP32.
- * Utiliza os ultimos 3 bytes (24 bits) do MAC para garantir
- * que o mesmo hardware sempre gera o mesmo PIN.
- */
 uint32_t generatePinFromMac() {
-    uint64_t macAddress  = ESP.getEfuseMac();
-    uint32_t last3Bytes  = (uint32_t)(macAddress & 0xFFFFFF);
-    uint32_t pin         = last3Bytes % 1000000; // Garante maximo 6 digitos
+
+    uint64_t macAddress = ESP.getEfuseMac();
+    uint32_t last3Bytes = (uint32_t)(macAddress & 0xFFFFFF);
+
+    uint32_t pin = last3Bytes % 1000000;
+
     DBG_PRINT(F("[BLE_SEC] PIN gerado: "));
     DBG_PRINTF("%06lu\n", pin);
+
     return pin;
 }
 
 String generateBleName() {
+
     uint64_t macAddress = ESP.getEfuseMac();
     uint16_t last2Bytes = (uint16_t)(macAddress & 0xFFFF);
+
     String bleName = "CHOPP_";
+
     if ((last2Bytes >> 8) < 0x10) bleName += "0";
     bleName += String((last2Bytes >> 8), HEX);
+
     if ((last2Bytes & 0xFF) < 0x10) bleName += "0";
     bleName += String((last2Bytes & 0xFF), HEX);
+
     bleName.toUpperCase();
-    DBG_PRINT(F("[BLE_SEC] Nome BLE gerado: "));
-    DBG_PRINTLN(bleName);
+
     return bleName;
 }
 
-/**
- * Retorna o MAC do ESP32 como string formatada.
- * Exemplo: AA:BB:CC:DD:EE:FF
- */
-String getMacAddress() {
-    uint64_t macAddress = ESP.getEfuseMac();
-    String macStr = "";
-    for (int i = 5; i >= 0; i--) {
-        uint8_t b = (uint8_t)((macAddress >> (i * 8)) & 0xFF);
-        if (b < 0x10) macStr += "0";
-        macStr += String(b, HEX);
-        if (i > 0) macStr += ":";
-    }
-    macStr.toUpperCase();
-    DBG_PRINT(F("[BLE_SEC] MAC Address: "));
-    DBG_PRINTLN(macStr);
-    return macStr;
-}
 
 // ============================================================
-// Variaveis globais NimBLE
+// Segurança BLE
 // ============================================================
-NimBLEServer          *pServer           = NULL;
-NimBLECharacteristic  *pTxCharacteristic = NULL;
-bool deviceConnected    = false;
-bool deviceAuthenticated = false;
 
-// ============================================================
-// Callback de seguranca BLE (NimBLE)
-// Substitui BLESecurityCallbacks + setSecurityCallbacks da lib antiga.
-// NimBLE unifica todos os eventos de seguranca em NimBLESecurityCallbacks.
-// ============================================================
 class MySecurity : public NimBLESecurityCallbacks {
 
     uint32_t onPassKeyRequest() override {
 
         uint32_t pin = generatePinFromMac();
 
-        DBG_PRINT(F("\n[BLE_SEC] onPassKeyRequest -> PIN: "));
+        DBG_PRINT(F("[BLE_SEC] PassKey request: "));
         DBG_PRINTF("%06lu\n", pin);
 
         return pin;
     }
 
-    // Chamado para confirmar o passkey (modo de confirmacao numerica)
+    void onPassKeyNotify(uint32_t pass_key) override {
+
+        DBG_PRINT(F("[BLE_SEC] PassKey notify: "));
+        DBG_PRINTF("%06lu\n", pass_key);
+    }
+
+    bool onSecurityRequest() override {
+
+        DBG_PRINTLN(F("[BLE_SEC] Security request"));
+        return true;
+    }
+
     bool onConfirmPIN(uint32_t pin) override {
 
-        DBG_PRINT(F("\n[BLE_SEC] onConfirmPIN: "));
+        DBG_PRINT(F("[BLE_SEC] Confirm PIN: "));
         DBG_PRINTF("%06lu\n", pin);
-        return true; // Aceita sempre — PIN validado pelo modo DISPLAY_ONLY
+
+        return true;
     }
 
     void onAuthenticationComplete(ble_gap_conn_desc *desc) override {
@@ -102,7 +91,7 @@ class MySecurity : public NimBLESecurityCallbacks {
 
             deviceAuthenticated = true;
 
-            DBG_PRINTLN(F("\n[BLE_SEC] Autenticacao concluida com sucesso!"));
+            DBG_PRINTLN(F("[BLE_SEC] Autenticado"));
 
             enviaBLE("AUTH:OK");
 
@@ -110,14 +99,14 @@ class MySecurity : public NimBLESecurityCallbacks {
 
             deviceAuthenticated = false;
 
-            DBG_PRINTLN(F("\n[BLE_SEC] Falha na autenticacao"));
+            DBG_PRINTLN(F("[BLE_SEC] Falha autenticacao"));
         }
     }
 };
 
 
 // ============================================================
-// Callback de conexao/desconexao BLE
+// Conexão BLE
 // ============================================================
 
 class MyServerCallbacks : public NimBLEServerCallbacks {
@@ -126,29 +115,30 @@ class MyServerCallbacks : public NimBLEServerCallbacks {
 
         digitalWrite(PINO_STATUS, LED_STATUS_ON);
 
-        DBG_PRINT(F("\n[BLE] Conectado"));
-        deviceConnected     = true;
-        deviceAuthenticated = false; // Sera confirmado no callback de seguranca
+        deviceConnected = true;
+        deviceAuthenticated = false;
+
+        DBG_PRINTLN(F("[BLE] Conectado"));
     }
 
     void onDisconnect(NimBLEServer *pServer) override {
 
         digitalWrite(PINO_STATUS, !LED_STATUS_ON);
 
-        DBG_PRINT(F("\n[BLE] Desconectado"));
-        deviceConnected     = false;
+        deviceConnected = false;
         deviceAuthenticated = false;
 
+        DBG_PRINTLN(F("[BLE] Desconectado"));
+
         delay(500);
-        // NimBLE: reinicia advertising via NimBLEDevice (nao via pServer->startAdvertising)
+
         NimBLEDevice::startAdvertising();
     }
 };
 
 
 // ============================================================
-// Callback de escrita na characteristic RX (App -> ESP32)
-// Substitui BLECharacteristicCallbacks da biblioteca antiga.
+// RX BLE
 // ============================================================
 
 class MyCallbacks : public NimBLECharacteristicCallbacks {
@@ -157,24 +147,21 @@ class MyCallbacks : public NimBLECharacteristicCallbacks {
 
         std::string rxValue = pCharacteristic->getValue();
 
-        DBG_PRINT(F("\n[BLE] Recebido: "));
-
         if (rxValue.length() > 0) {
 
             String cmd = "";
 
-            for (size_t i = 0; i < rxValue.length(); i++) {
+            for (int i = 0; i < rxValue.length(); i++) {
+
                 cmd += (char)rxValue[i];
             }
 
-            DBG_PRINT(cmd);
+            DBG_PRINT(F("[BLE] CMD: "));
+            DBG_PRINTLN(cmd);
 
             if (!deviceAuthenticated) {
 
-                DBG_PRINTLN(F("\n[BLE_SEC] Comando bloqueado - dispositivo nao autenticado"));
-
                 enviaBLE("ERROR:NOT_AUTHENTICATED");
-
                 return;
             }
 
@@ -190,23 +177,17 @@ class MyCallbacks : public NimBLECharacteristicCallbacks {
 
 void setupBLE() {
 
-    String   bleName = generateBleName();
-    uint32_t pin     = generatePinFromMac();
+    String bleName = generateBleName();
+    uint32_t pin = generatePinFromMac();
 
     NimBLEDevice::init(bleName.c_str());
 
-    // Seguranca NimBLE — substitui o bloco BLESecurity da biblioteca antiga:
-    //   pSecurity->setAuthenticationMode(ESP_LE_AUTH_REQ_SC_MITM_BOND)
-    //   pSecurity->setCapability(ESP_IO_CAP_OUT)
-    //   pSecurity->setInitEncryptionKey(...)
-    //   pSecurity->setStaticPIN(pin)
-    NimBLEDevice::setSecurityAuth(true, true, true); // bonding, MITM, Secure Connections
-    NimBLEDevice::setSecurityPasskey(pin);           // PIN estatico derivado do MAC
-    NimBLEDevice::setSecurityIOCap(BLE_HS_IO_DISPLAY_ONLY); // Apenas exibe PIN
+    NimBLEDevice::setSecurityAuth(true, true, true);
+    NimBLEDevice::setSecurityPasskey(pin);
+    NimBLEDevice::setSecurityIOCap(BLE_HS_IO_DISPLAY_ONLY);
     NimBLEDevice::setSecurityCallbacks(new MySecurity());
 
     pServer = NimBLEDevice::createServer();
-
     pServer->setCallbacks(new MyServerCallbacks());
 
     NimBLEService *pService = pServer->createService(SERVICE_UUID);
@@ -228,23 +209,15 @@ void setupBLE() {
     NimBLEAdvertising *pAdvertising = NimBLEDevice::getAdvertising();
 
     pAdvertising->addServiceUUID(SERVICE_UUID);
-
     pAdvertising->setScanResponse(true);
-
     pAdvertising->start();
 
-    DBG_PRINT(F("\n[BLE] Aguardando conexao"));
-    DBG_PRINT(F("\n[BLE] Nome: "));
-    DBG_PRINTLN(bleName);
-
-    DBG_PRINT(F("[BLE_SEC] PIN: "));
-    DBG_PRINTF("%06lu\n", pin);
+    DBG_PRINTLN(F("[BLE] Aguardando conexão"));
 }
 
 
 // ============================================================
-// enviaBLE() — envia string via characteristic TX com notificacao.
-// Interface publica identica a versao anterior.
+// Envio BLE
 // ============================================================
 
 void enviaBLE(String msg) {
@@ -254,21 +227,22 @@ void enviaBLE(String msg) {
         msg += '\n';
 
         pTxCharacteristic->setValue(msg.c_str());
-
         pTxCharacteristic->notify();
     }
 }
 
 
 // ============================================================
-// Controle de autenticacao — interface publica inalterada.
+// Controle autenticação
 // ============================================================
 
 bool isDeviceAuthenticated() {
+
     return deviceAuthenticated;
 }
 
 void setDeviceAuthenticated(bool authenticated) {
+
     deviceAuthenticated = authenticated;
 }
 
