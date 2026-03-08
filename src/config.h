@@ -29,7 +29,8 @@
     // Habilita modulos para compilação
     #define USAR_ESP32_UART_BLE
     //#define USAR_PAGINA_CONFIG
-    #define USAR_RFID
+    
+ //#define USAR_RFID
     
     // pinout
     #ifdef ARDUINO_ESP32S3_DEV 

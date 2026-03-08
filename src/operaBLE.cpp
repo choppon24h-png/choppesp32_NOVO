@@ -11,8 +11,38 @@ bool deviceAuthenticated = false;
 
 
 // ============================================================
+// FUNÇÕES AUXILIARES (ANTES FALTAVAM NO PROJETO)
+// ============================================================
+
+uint32_t generatePinFromMac() {
+
+    uint64_t mac = ESP.getEfuseMac();
+
+    uint32_t pin = (mac & 0xFFFFFF) % 1000000;
+
+    if(pin < 100000) {
+        pin += 100000;
+    }
+
+    return pin;
+}
+
+String generateBleName() {
+
+    uint64_t mac = ESP.getEfuseMac();
+
+    char name[20];
+
+    sprintf(name, "CHOPP_%04X", (uint16_t)(mac & 0xFFFF));
+
+    return String(name);
+}
+
+
+// ============================================================
 // Callback de segurança BLE
 // ============================================================
+
 class MySecurity : public NimBLESecurityCallbacks {
 
     uint32_t onPassKeyRequest() override {
@@ -37,7 +67,6 @@ class MySecurity : public NimBLESecurityCallbacks {
         DBG_PRINTLN(F("\n[BLE_SEC] onSecurityRequest"));
 
         return true;
-
     }
 
     bool onConfirmPIN(uint32_t pin) override {
@@ -46,7 +75,6 @@ class MySecurity : public NimBLESecurityCallbacks {
         DBG_PRINTF("%06lu\n", pin);
 
         return true;
-
     }
 
     void onAuthenticationComplete(ble_gap_conn_desc *desc) override {
@@ -64,7 +92,6 @@ class MySecurity : public NimBLESecurityCallbacks {
             deviceAuthenticated = false;
 
             DBG_PRINTLN(F("\n[BLE_SEC] Falha na autenticacao"));
-
         }
     }
 };
@@ -73,6 +100,7 @@ class MySecurity : public NimBLESecurityCallbacks {
 // ============================================================
 // Callback de conexao/desconexao BLE
 // ============================================================
+
 class MyServerCallbacks : public NimBLEServerCallbacks {
 
     void onConnect(NimBLEServer *pServer) override {
@@ -84,7 +112,6 @@ class MyServerCallbacks : public NimBLEServerCallbacks {
         deviceConnected = true;
 
         deviceAuthenticated = false;
-
     }
 
     void onDisconnect(NimBLEServer *pServer) override {
@@ -100,7 +127,6 @@ class MyServerCallbacks : public NimBLEServerCallbacks {
         delay(500);
 
         NimBLEDevice::startAdvertising();
-
     }
 };
 
@@ -108,6 +134,7 @@ class MyServerCallbacks : public NimBLEServerCallbacks {
 // ============================================================
 // Callback RX
 // ============================================================
+
 class MyCallbacks : public NimBLECharacteristicCallbacks {
 
     void onWrite(NimBLECharacteristic *pCharacteristic) override {
@@ -121,9 +148,7 @@ class MyCallbacks : public NimBLECharacteristicCallbacks {
             String cmd = "";
 
             for (size_t i = 0; i < rxValue.length(); i++) {
-
                 cmd += (char)rxValue[i];
-
             }
 
             DBG_PRINT(cmd);
@@ -135,11 +160,9 @@ class MyCallbacks : public NimBLECharacteristicCallbacks {
                 enviaBLE("ERROR:NOT_AUTHENTICATED");
 
                 return;
-
             }
 
             executaOperacao(cmd);
-
         }
     }
 };
@@ -148,6 +171,7 @@ class MyCallbacks : public NimBLECharacteristicCallbacks {
 // ============================================================
 // Setup BLE
 // ============================================================
+
 void setupBLE() {
 
     String bleName = generateBleName();
@@ -193,13 +217,10 @@ void setupBLE() {
     pAdvertising->start();
 
     DBG_PRINT(F("\n[BLE] Aguardando conexao"));
-
     DBG_PRINT(F("\n[BLE] Nome: "));
-
     DBG_PRINTLN(bleName);
 
     DBG_PRINT(F("[BLE_SEC] PIN: "));
-
     DBG_PRINTF("%06lu\n", pin);
 }
 
@@ -207,6 +228,7 @@ void setupBLE() {
 // ============================================================
 // Envio BLE
 // ============================================================
+
 void enviaBLE(String msg) {
 
     if (deviceConnected && pTxCharacteristic != NULL) {
@@ -216,7 +238,6 @@ void enviaBLE(String msg) {
         pTxCharacteristic->setValue(msg.c_str());
 
         pTxCharacteristic->notify();
-
     }
 }
 
@@ -224,17 +245,13 @@ void enviaBLE(String msg) {
 // ============================================================
 // Controle autenticacao
 // ============================================================
+
 bool isDeviceAuthenticated() {
-
     return deviceAuthenticated;
-
 }
 
-
 void setDeviceAuthenticated(bool authenticated) {
-
     deviceAuthenticated = authenticated;
-
 }
 
 #endif
