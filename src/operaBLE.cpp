@@ -12,23 +12,11 @@ NimBLECharacteristic *pTxCharacteristic = NULL;
 bool deviceConnected = false;
 bool deviceAuthenticated = false;
 
+static const uint32_t BLE_FIXED_PIN = 259087;
 
 // ============================================================
 // Identidade do dispositivo
 // ============================================================
-
-uint32_t generatePinFromMac() {
-
-    uint64_t macAddress = ESP.getEfuseMac();
-    uint32_t last3Bytes = (uint32_t)(macAddress & 0xFFFFFF);
-
-    uint32_t pin = last3Bytes % 1000000;
-
-    DBG_PRINT(F("[BLE_SEC] PIN gerado: "));
-    DBG_PRINTF("%06lu\n", pin);
-
-    return pin;
-}
 
 String generateBleName() {
 
@@ -57,12 +45,10 @@ class MySecurity : public NimBLESecurityCallbacks {
 
     uint32_t onPassKeyRequest() override {
 
-        uint32_t pin = generatePinFromMac();
-
         DBG_PRINT(F("[BLE_SEC] PassKey request: "));
-        DBG_PRINTF("%06lu\n", pin);
+        DBG_PRINTF("%06lu\n", BLE_FIXED_PIN);
 
-        return pin;
+        return BLE_FIXED_PIN;
     }
 
     void onPassKeyNotify(uint32_t pass_key) override {
@@ -91,7 +77,7 @@ class MySecurity : public NimBLESecurityCallbacks {
 
             deviceAuthenticated = true;
 
-            DBG_PRINTLN(F("[BLE_SEC] Autenticado"));
+            DBG_PRINTLN(F("[BLE] autenticado"));
 
             enviaBLE("AUTH:OK");
 
@@ -112,26 +98,40 @@ class MySecurity : public NimBLESecurityCallbacks {
 class MyServerCallbacks : public NimBLEServerCallbacks {
 
     void onConnect(NimBLEServer *pServer) override {
+        (void)pServer;
+        // Usa a versao com desc para evitar duplicar logica
+    }
+
+    void onConnect(NimBLEServer *pServer, ble_gap_conn_desc *desc) override {
 
         digitalWrite(PINO_STATUS, LED_STATUS_ON);
 
         deviceConnected = true;
         deviceAuthenticated = false;
 
-        DBG_PRINTLN(F("[BLE] Conectado"));
+        DBG_PRINTLN(F("[BLE] conectado"));
+
+        // Garante que o pareamento/criptografia seja iniciado
+        if (desc != nullptr) {
+            NimBLEDevice::startSecurity(desc->conn_handle);
+        }
     }
 
     void onDisconnect(NimBLEServer *pServer) override {
+        (void)pServer;
+        // Usa a versao com desc para evitar duplicar logica
+    }
+
+    void onDisconnect(NimBLEServer *pServer, ble_gap_conn_desc *desc) override {
+        (void)desc;
 
         digitalWrite(PINO_STATUS, !LED_STATUS_ON);
 
         deviceConnected = false;
         deviceAuthenticated = false;
 
-        DBG_PRINTLN(F("[BLE] Desconectado"));
-
-        delay(500);
-
+        DBG_PRINTLN(F("[BLE] desconectado"));
+        DBG_PRINTLN(F("[BLE] advertising iniciado"));
         NimBLEDevice::startAdvertising();
     }
 };
@@ -156,7 +156,7 @@ class MyCallbacks : public NimBLECharacteristicCallbacks {
                 cmd += (char)rxValue[i];
             }
 
-            DBG_PRINT(F("[BLE] CMD: "));
+            DBG_PRINT(F("[BLE] comando recebido: "));
             DBG_PRINTLN(cmd);
 
             if (!deviceAuthenticated) {
@@ -178,12 +178,11 @@ class MyCallbacks : public NimBLECharacteristicCallbacks {
 void setupBLE() {
 
     String bleName = generateBleName();
-    uint32_t pin = generatePinFromMac();
-
     NimBLEDevice::init(bleName.c_str());
 
+    NimBLEDevice::setPower(ESP_PWR_LVL_P9);
     NimBLEDevice::setSecurityAuth(true, true, true);
-    NimBLEDevice::setSecurityPasskey(pin);
+    NimBLEDevice::setSecurityPasskey(BLE_FIXED_PIN);
     NimBLEDevice::setSecurityIOCap(BLE_HS_IO_DISPLAY_ONLY);
     NimBLEDevice::setSecurityCallbacks(new MySecurity());
 
@@ -196,6 +195,7 @@ void setupBLE() {
         CHARACTERISTIC_UUID_TX,
         NIMBLE_PROPERTY::NOTIFY
     );
+    pTxCharacteristic->addDescriptor(new NimBLE2902());
 
     NimBLECharacteristic *pRxCharacteristic = pService->createCharacteristic(
         CHARACTERISTIC_UUID_RX,
@@ -210,9 +210,12 @@ void setupBLE() {
 
     pAdvertising->addServiceUUID(SERVICE_UUID);
     pAdvertising->setScanResponse(true);
+    pAdvertising->setMinPreferred(0x06);
+    pAdvertising->setMaxPreferred(0x12);
     pAdvertising->start();
 
-    DBG_PRINTLN(F("[BLE] Aguardando conexão"));
+    DBG_PRINTLN(F("[BLE] advertising iniciado"));
+    DBG_PRINTLN(F("[BLE] aguardando conexao"));
 }
 
 

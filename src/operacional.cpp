@@ -141,7 +141,8 @@ void taskLiberaML(void *pvParameters) {
                 attachInterrupt(digitalPinToInterrupt(PINO_SENSOR_FLUSO), fluxoISR, RISING);
                 
                 // Aciona valvula
-                digitalWrite(PINO_RELE,RELE_ON);                
+                digitalWrite(PINO_RELE,RELE_ON);
+                DBG_PRINTLN(F("[VALVE] aberta"));
                 tempoInicio = esp_timer_get_time();
                 horaPulso = tempoInicio;
                 // [FIX #2] Timeout renovavel: a cada pulso recebido, horaPulso e atualizado na ISR.
@@ -163,6 +164,8 @@ void taskLiberaML(void *pvParameters) {
                             //vazao = (mlLiberado / tempoDecorridoS) * 60.0; // Calcula ML/seg e converte para ML/min
                             //vazao /= 1000.0; // Converte para L/min
                         }
+                        DBG_PRINT(F("[FLOW] pulsos: "));
+                        DBG_PRINTLN(contadorPulso);
                         #ifdef USAR_ESP32_UART_BLE
                             //statusRetorno = COMANDO_VZ + String(vazao,3);
                             statusRetorno = COMANDO_VP + String(mlLiberado,3);
@@ -174,6 +177,7 @@ void taskLiberaML(void *pvParameters) {
                 }                
 
                 digitalWrite(PINO_RELE,!RELE_ON);
+                DBG_PRINTLN(F("[VALVE] fechada"));
                 detachInterrupt(digitalPinToInterrupt(PINO_SENSOR_FLUSO));
                 
                 // Envia status
